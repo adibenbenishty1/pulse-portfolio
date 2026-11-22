@@ -1,0 +1,27 @@
+FROM debian:trixie-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/poetry \
+    && /opt/poetry/bin/pip install --no-cache-dir poetry==2.3.2
+
+ENV PATH="/opt/poetry/bin:$PATH"
+ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+
+WORKDIR /app
+
+COPY pyproject.toml poetry.lock ./
+
+RUN poetry install --only main --no-root --no-interaction
+
+COPY alembic/ ./alembic/
+COPY api/ ./api/
+COPY alembic.ini ./
+
+RUN poetry install --only-root --no-interaction --no-ansi
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+CMD ["pulse-api", "serve"]

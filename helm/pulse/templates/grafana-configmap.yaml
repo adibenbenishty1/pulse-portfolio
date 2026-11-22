@@ -1,0 +1,13 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.dashboardNamespace }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pulse.fullname" . }}-grafana-dashboard
+  namespace: {{ .Values.monitoring.dashboardNamespace | quote }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  pulse-processing.json: |-
+    {{- .Files.Get "dashboards/pulse-processing.json" | nindent 4 }}
+{{- end }}

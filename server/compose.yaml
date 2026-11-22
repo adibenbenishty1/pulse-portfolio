@@ -1,0 +1,105 @@
+name: pulse
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: pulse
+      POSTGRES_USER: pulse
+      POSTGRES_PASSWORD: pulse-local-only
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: pgadmin-local-only
+    ports:
+      - "127.0.0.1:5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: pulse
+      RABBITMQ_DEFAULT_PASS: pulse-local-only
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  api:
+    image: pulse:local
+    build:
+      context: .
+      dockerfile: dockerfile
+    command: ["pulse-api", "serve", "--host", "0.0.0.0"]
+    ports:
+        - "127.0.0.1:8000:8000"
+    environment:
+      PULSE_DB_HOST: postgres
+      PULSE_RABBITMQ_HOST: rabbitmq
+      PULSE_STORAGE_ROOT: /data/storage
+    volumes:
+        - document_data:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: pulse:local
+    command: ["pulse-worker", "serve"]
+    environment:
+      PULSE_DB_HOST: postgres
+      PULSE_RABBITMQ_HOST: rabbitmq
+      PULSE_STORAGE_ROOT: /data/storage
+    volumes:
+      - document_data:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    image: pulse:local
+    command: ["pulse-api", "init-db"]
+    environment:
+      PULSE_DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  document_data:
+  pgadmin_data:

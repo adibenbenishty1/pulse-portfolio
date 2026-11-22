@@ -1,0 +1,48 @@
+name: publish.server
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'server-v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up project
+        uses: ./.github/actions/setup-project
+        with:
+          working-directory: server
+          run-lint: 'false'
+
+      - name: Build image
+        uses: ./.github/actions/build-image
+        with:
+          working-directory: server
+          image-tag: pulse-server:build
+
+      - name: Log into GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish image
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^server-v[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.-]+)?$ ]]
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/server:$RELEASE_TAG"
+          docker tag pulse-server:build "$image"
+          docker push "$image"

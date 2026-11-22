@@ -1,0 +1,19 @@
+FROM python:3.13-slim AS build
+
+RUN pip install --no-cache-dir poetry==2.3.2
+
+ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+
+WORKDIR /app
+
+COPY pyproject.toml poetry.lock ./
+
+RUN poetry install --only main --no-root --no-interaction
+
+COPY client/ ./client/
+
+RUN poetry build
+
+FROM scratch
+
+COPY --from=build /app/dist/ /dist/

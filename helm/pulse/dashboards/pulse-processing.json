@@ -1,0 +1,312 @@
+{
+  "uid": "pulse-processing",
+  "title": "Pulse Document Processing",
+  "tags": [
+    "pulse"
+  ],
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "RabbitMQ queue depth",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rabbitmq_detailed_queue_messages_ready",
+          "legendFormat": "Ready · {{namespace}}/{{pod}} · {{vhost}}/{{queue}}"
+        },
+        {
+          "refId": "B",
+          "expr": "rabbitmq_detailed_queue_messages_unacked",
+          "legendFormat": "Unacknowledged · {{namespace}}/{{pod}} · {{vhost}}/{{queue}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "API uploads and publishes",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (namespace, job) (rate(pulse_api_files_saved_total[$__rate_interval]))",
+          "legendFormat": "Files saved · {{namespace}}/{{job}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (namespace, job) (rate(pulse_api_messages_published_total[$__rate_interval]))",
+          "legendFormat": "Messages published · {{namespace}}/{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Worker deliveries and outcomes",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (namespace, job) (rate(pulse_worker_messages_received_total[$__rate_interval]))",
+          "legendFormat": "Messages received · {{namespace}}/{{job}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (namespace, job) (rate(pulse_worker_jobs_completed_total[$__rate_interval]))",
+          "legendFormat": "Jobs completed · {{namespace}}/{{job}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (namespace, job) (rate(pulse_worker_jobs_failed_total[$__rate_interval]))",
+          "legendFormat": "Jobs failed · {{namespace}}/{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Recent processing jobs",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pulse-postgres"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pulse-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT *\nFROM public.processing_jobs\nORDER BY created_at DESC, id DESC\nLIMIT 50;"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Recent processing jobs over time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pulse-postgres"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "description": "Counts from the latest 50 rows within the selected dashboard time range.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pulse-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "WITH recent AS (\n  SELECT created_at\n  FROM public.processing_jobs\n  ORDER BY created_at DESC, id DESC\n  LIMIT 50\n)\nSELECT $__timeGroupAlias(created_at, $__interval), count(*) AS jobs\nFROM recent\nWHERE $__timeFilter(created_at)\nGROUP BY 1\nORDER BY 1;"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Recent analyses",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pulse-postgres"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pulse-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT *\nFROM public.analyses\nORDER BY created_at DESC, id DESC\nLIMIT 50;"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Recent analyses over time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pulse-postgres"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "description": "Counts from the latest 50 rows within the selected dashboard time range.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pulse-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "WITH recent AS (\n  SELECT created_at\n  FROM public.analyses\n  ORDER BY created_at DESC, id DESC\n  LIMIT 50\n)\nSELECT $__timeGroupAlias(created_at, $__interval), count(*) AS analyses\nFROM recent\nWHERE $__timeFilter(created_at)\nGROUP BY 1\nORDER BY 1;"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Documents",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pulse-postgres"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pulse-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT *\nFROM public.documents\nORDER BY created_at DESC, id DESC;"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Jobs awaiting completion or failed",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pulse-postgres"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pulse-postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT *\nFROM public.processing_jobs\nWHERE status <> 'COMPLETED'\nORDER BY created_at DESC, id DESC;"
+        }
+      ]
+    }
+  ]
+}

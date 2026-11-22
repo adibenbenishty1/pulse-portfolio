@@ -1,0 +1,71 @@
+name: publish.sdk
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'sdk-v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up project
+        uses: ./.github/actions/setup-project
+        with:
+          working-directory: packages
+          run-lint: 'false'
+
+      - name: Verify release version
+        working-directory: packages
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(poetry version --short)
+          test "$RELEASE_TAG" = "sdk-v$version"
+
+      - name: Build image
+        uses: ./.github/actions/build-image
+        with:
+          working-directory: packages
+          image-tag: pulse-sdk:build
+
+      - name: Extract distributions
+        run: |
+          container=$(docker create pulse-sdk:build /unused)
+          trap 'docker rm "$container" >/dev/null' EXIT
+          docker cp "$container:/dist" packages/dist
+
+      - name: Validate distributions
+        working-directory: packages
+        run: |
+          version=$(poetry version --short)
+
+          test -f "dist/pulse_client-$version.tar.gz"
+          test -f "dist/pulse_client-$version-py3-none-any.whl"
+
+          distributions=(dist/*)
+          test "${#distributions[@]}" -eq 2
+
+          pipx run --spec twine==6.2.0 twine check dist/*
+
+      - name: Smoke-test wheel
+        working-directory: packages
+        run: |
+          python -m venv "$RUNNER_TEMP/sdk-smoke"
+          "$RUNNER_TEMP/sdk-smoke/bin/pip" install dist/*.whl
+          "$RUNNER_TEMP/sdk-smoke/bin/pulse-client" --help
+
+      - name: Upload distributions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" packages/dist/* --repo "$GITHUB_REPOSITORY"

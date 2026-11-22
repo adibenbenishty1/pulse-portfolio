@@ -1,0 +1,50 @@
+# Local single-node cluster: API and worker can share an RWO volume on one node.
+storage:
+  accessModes:
+    - ReadWriteOnce
+
+monitoring:
+  dashboardNamespace: monitoring
+
+# kube-prometheus-stack settings for a shared dev values file.
+alertmanager:
+  enabled: false
+
+grafana:
+  enabled: true
+  envValueFrom:
+    PULSE_GRAFANA_POSTGRES_PASSWORD:
+      secretKeyRef:
+        name: pulse-grafana-postgres
+        key: password
+        optional: true
+  additionalDataSources:
+    - name: Pulse PostgreSQL
+      uid: pulse-postgres
+      type: postgres
+      access: proxy
+      url: pulse-postgres.default.svc.cluster.local:5432
+      user: grafana_reader
+      editable: false
+      jsonData:
+        database: pulse
+        sslmode: disable
+      secureJsonData:
+        password: $PULSE_GRAFANA_POSTGRES_PASSWORD
+  persistence:
+    enabled: false
+  # Clear legacy file provisioning when Helm reuses values from an older release.
+  dashboardProviders: null
+  dashboards: null
+  sidecar:
+    dashboards:
+      enabled: true
+
+prometheus:
+  prometheusSpec:
+    retention: 3d
+    retentionSize: 1GB
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi

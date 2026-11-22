@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pulse.fullname" . }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: documents-api
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    matchLabels:
+      {{- include "pulse.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: documents-api
+
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/pulse-configmap.yaml") . | sha256sum | quote }}
+      labels:
+        {{- include "pulse.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: documents-api
+
+    spec:
+      containers:
+        - name: documents-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "server-v%s" .Chart.AppVersion) }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          command: ["pulse-api", "serve", "--host", "0.0.0.0"]
+
+          envFrom:
+            - configMapRef:
+                name: {{ include "pulse.fullname" . }}-config
+          {{- if and (eq .Values.storage.backend "s3") .Values.storage.s3.credentialsSecret }}
+            - secretRef:
+                name: {{ .Values.storage.s3.credentialsSecret | quote }}
+          {{- end }}
+          env:
+            - name: PULSE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pulse.fullname" . }}-credentials
+                  key: PULSE_DB_PASSWORD
+            - name: PULSE_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pulse.fullname" . }}-credentials
+                  key: PULSE_RABBITMQ_PASSWORD
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          ports:
+            - name: http
+              containerPort: 8000
+
+          readinessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            - name: documents
+              mountPath: {{ .Values.storage.root | quote }}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+      volumes:
+        - name: documents
+          persistentVolumeClaim:
+            claimName: {{ .Values.storage.existingClaim | default (printf "%s-documents" (include "pulse.fullname" .)) | quote }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

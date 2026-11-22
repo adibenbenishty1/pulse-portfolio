@@ -1,0 +1,6 @@
+storage:
+  backend: s3
+  s3:
+    bucket: ""
+    region: us-east-2
+    credentialsSecret: ""

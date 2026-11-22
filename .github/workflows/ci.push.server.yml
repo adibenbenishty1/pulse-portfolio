@@ -1,0 +1,34 @@
+name: push.server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/ci.push.server.yml"
+      - ".github/actions/setup-project/**"
+      - ".github/actions/build-image/**"
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up project
+        uses: ./.github/actions/setup-project
+        with:
+          working-directory: server
+
+      - name: Build image
+        uses: ./.github/actions/build-image
+        with:
+          working-directory: server
+          image-tag: pulse-server:build

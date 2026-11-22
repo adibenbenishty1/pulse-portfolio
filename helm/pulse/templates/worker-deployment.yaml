@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pulse.fullname" . }}-worker
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "pulse.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/pulse-configmap.yaml") . | sha256sum | quote }}
+      labels:
+        {{- include "pulse.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "server-v%s" .Chart.AppVersion) }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["pulse-worker", "serve"]
+          ports:
+            - name: metrics
+              containerPort: 9100
+          envFrom:
+            - configMapRef:
+                name: {{ include "pulse.fullname" . }}-config
+          {{- if and (eq .Values.storage.backend "s3") .Values.storage.s3.credentialsSecret }}
+            - secretRef:
+                name: {{ .Values.storage.s3.credentialsSecret | quote }}
+          {{- end }}
+          env:
+            - name: PULSE_WORKER_METRICS_HOST
+              value: "0.0.0.0"
+            - name: PULSE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pulse.fullname" . }}-credentials
+                  key: PULSE_DB_PASSWORD
+            - name: PULSE_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pulse.fullname" . }}-credentials
+                  key: PULSE_RABBITMQ_PASSWORD
+          {{- with .Values.worker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: documents
+              mountPath: {{ .Values.storage.root | quote }}
+      volumes:
+        - name: documents
+          persistentVolumeClaim:
+            claimName: {{ .Values.storage.existingClaim | default (printf "%s-documents" (include "pulse.fullname" .)) | quote }}

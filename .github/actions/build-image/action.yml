@@ -1,0 +1,27 @@
+name: Build image
+description: Build a server or SDK image with a project-specific Docker cache
+
+inputs:
+  working-directory:
+    description: Project directory
+    required: true
+  image-tag:
+    description: Local image tag
+    required: true
+
+runs:
+  using: composite
+
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build image
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ inputs.working-directory }}
+        file: ${{ inputs.working-directory }}/dockerfile
+        load: true
+        tags: ${{ inputs.image-tag }}
+        cache-from: type=gha,scope=${{ inputs.working-directory }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.working-directory }}

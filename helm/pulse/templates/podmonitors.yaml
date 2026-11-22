@@ -1,0 +1,48 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "pulse.fullname" . }}-api
+  labels:
+    release: {{ .Values.monitoring.release | quote }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "pulse.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: documents-api
+  podMetricsEndpoints:
+    - port: http
+      path: /health/metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "pulse.fullname" . }}-worker
+  labels:
+    release: {{ .Values.monitoring.release | quote }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "pulse.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "pulse.fullname" . }}-rabbitmq
+  labels:
+    release: {{ .Values.monitoring.release | quote }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "pulse.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: rabbitmq
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics/detailed
+      params:
+        family: [queue_coarse_metrics]
+{{- end }}

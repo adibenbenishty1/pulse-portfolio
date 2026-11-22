@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "pulse.fullname" . }}-migrate
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    # Keep failures for inspection until the next migration attempt.
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "pulse.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: wait-for-postgres
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "server-v%s" .Chart.AppVersion) }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "api.db.wait"]
+          args:
+            - --timeout
+            - {{ .Values.migrations.databaseWaitSeconds | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "pulse.fullname" . }}-config
+          env:
+            - name: PULSE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pulse.fullname" . }}-credentials
+                  key: PULSE_DB_PASSWORD
+          {{- with .Values.migrations.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "server-v%s" .Chart.AppVersion) }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["pulse-api", "init-db"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "pulse.fullname" . }}-config
+          env:
+            - name: PULSE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pulse.fullname" . }}-credentials
+                  key: PULSE_DB_PASSWORD
+          {{- with .Values.migrations.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
