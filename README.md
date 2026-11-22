@@ -1,6 +1,9 @@
-# Pulse
+# Pulse 
+**Asynchronous Document Processing** · **Message Queues** · **Background Workers** · **Publisher Confirms** · **Observability**
 
-Upload a document, get a job ID, and let a separate worker analyze the text. Pulse combines a FastAPI service, a RabbitMQ quorum queue, and a Python worker with PostgreSQL as the shared record of documents, jobs, and results.
+
+Upload a document, get a job ID, and let a separate worker analyze the text. Pulse combines a FastAPI service, a RabbitMQ broker, and a Python worker with PostgreSQL as the shared record of documents, jobs, and results.
+
 
 ```mermaid
 flowchart TD
