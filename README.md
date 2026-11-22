@@ -17,10 +17,11 @@ flowchart TD
     API --> Storage[("Filesystem or S3")]
     Worker --> Storage
     API --> Prometheus
-	subgraph Service["Data scraping and visualization"]
-		Worker -->|"Dedicated HTTP metrics port"| Prometheus
-		Prometheus --> Grafana
-	end
+    Worker -->|"Dedicated HTTP metrics port"| Prometheus
+    subgraph Monitoring["Monitoring"]
+        Prometheus --> Grafana
+    end
+    style Monitoring fill:#808080,stroke:#666666,color:#111111
 ```
 
 ## Inside Pulse
