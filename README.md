@@ -3,7 +3,7 @@
 Upload a document, get a job ID, and let a separate worker analyze the text. Pulse combines a FastAPI service, a RabbitMQ quorum queue, and a Python worker with PostgreSQL as the shared record of documents, jobs, and results.
 
 ```mermaid
-flowchart LR
+flowchart TD
     Client["Python SDK / CLI"] --> API
     subgraph Service["FastAPI process"]
         API["Documents, jobs, and health routers"] --> FIFO["Bounded thread-safe FIFO"]
@@ -17,28 +17,20 @@ flowchart LR
     API --> Storage[("Filesystem or S3")]
     Worker --> Storage
     API --> Prometheus
-    Worker -->|"Dedicated HTTP metrics port"| Prometheus
-    Prometheus --> Grafana
+	subgraph Service["Data scraping and visualization"]
+		Worker -->|"Dedicated HTTP metrics port"| Prometheus
+		Prometheus --> Grafana
+	end
 ```
 
-## Inside the queue
+## Inside Pulse
 
-1. **Register.** The [FastAPI service](server/api/main.py) starts and stops the publisher with the application lifespan. Its documents router stores the uploaded bytes and registers the document and job. The jobs router exposes processing status, and the health router serves liveness and Prometheus metrics.
-2. **Publish.** [JobPublisher](server/api/messaging/jobpublisher.py) owns its AMQP connection and channel on a dedicated thread. It drains a bounded, thread-safe FIFO and publishes one job ID at a time. The thread reuses its channel across requests, saving the round trips associated with opening a channel for every publish. [RabbitMQ channel lifecycle guidance](https://www.rabbitmq.com/docs/channels#channel-lifecycle)
-3. **Confirm.** Each queued publish has its own Python `Future`. The upload handler waits for that future before returning the document and job IDs. RabbitMQ publisher confirms let the thread resolve the future on broker acceptance or report a publish failure to the waiting handler. The jobs endpoint tracks the worker's processing outcome.
-4. **Process.** The [worker](server/api/worker/main.py) runs in its own process and consumes with a prefetch of one. It marks the job as processing, reads the document, computes text statistics, and commits the analysis and completed status to PostgreSQL before acknowledging the message. On a processing exception, it records the failure and negatively acknowledges the delivery without requeuing it.
+1. ***Documents/Jobs service.*** [FastAPI service](server/api/api/documents.py) Classic Http methods that enable uploading a document and getting a job information/status. The service lifespan starts and stops another thread which manages communication with the broker.
+3. ***Publish.*** a dedicated [JobPublisher](server/api/messaging/jobpublisher.py) class that maintains broker communication channel open, loads new jobs into a thread safe queue which in turn hands messages to the broker.
+4. ***Worker.*** [A separate process/application](server/api/worker/main.py)  that marks the job as processing, reads the document, computes text statistics, and commits the analysis and completed status to PostgreSQL before acknowledging the message. On a processing exception, it records the failure and negatively acknowledges the delivery without requeuing it.
+5. ***Relational Schema.*** [Classic relational schema](server/api/models) of Documents, ProcessingJob and Analysis - stored in a postgres instance.
 
-## Run locally
 
-With Docker and Compose installed, start PostgreSQL, RabbitMQ, the migration service, the API, and the worker from the repository root.
-
-```bash
-docker compose -f server/compose.yaml up --build -d
-curl --fail http://localhost:8000/health/live
-curl --fail -F 'file=@README.md' http://localhost:8000/documents
-```
-
-The upload returns a `document_id` and a `job_id`. Use [Swagger UI](http://localhost:8000/docs) to look up the document and job under their respective routers. The [Python SDK and CLI](packages/client/) wrap these endpoints.
 
 ## Build, release, and deploy
 
